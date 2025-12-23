@@ -6,15 +6,14 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "AbilitySystemComponent.h"
-#include "Abilities/GameplayAbility.h"
+#include  "GameFramework/CharacterMovementComponent.h"
 
 AMainPlayer::AMainPlayer()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character
 	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
 	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
 	PlayerCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
@@ -39,18 +38,6 @@ void AMainPlayer::BeginPlay()
 			}
 		}
 	}
-	
-	// Grant base abilities
-	if (AbilitySystemComponent && HasAuthority())
-	{
-		for (TSubclassOf<UGameplayAbility>& AbilityClass : BaseAbilities)
-		{
-			if (AbilityClass)
-			{
-				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
-			}
-		}
-	}
 }
 
 void AMainPlayer::Move(const FInputActionValue& Value)
@@ -72,18 +59,8 @@ void AMainPlayer::Look(const FInputActionValue& Value)
 	FVector2D LookVector = Value.Get<FVector2D>();
 	if (Controller)
 	{
-		// Apply horizontal sensitivity
-		float YawInput = LookVector.X * LookSensitivityX;
-		AddControllerYawInput(YawInput);
-
-		// Apply vertical sensitivity and invert option
-		float PitchInput = LookVector.Y * LookSensitivityY;
-		if (bInvertYAxis)
-		{
-			PitchInput *= -1.0f;
-		}
-		
-		AddControllerPitchInput(PitchInput);
+		AddControllerYawInput(LookVector.X);
+		AddControllerPitchInput(LookVector.Y);
 	}
 }
 

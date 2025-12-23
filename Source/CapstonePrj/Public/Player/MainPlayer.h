@@ -40,16 +40,6 @@ public:
 	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
     TArray<TSubclassOf<class UGameplayAbility>> BaseAbilities;
-
-	// Camera Settings
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Sensitivity", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float LookSensitivityX = 0.5f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Sensitivity", meta = (ClampMin = "0.1", ClampMax = "1.0"))
-	float LookSensitivityY = 0.2f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Settings")
-	bool bInvertYAxis = false;
 	
 protected:
 	// Called when the game starts or when spawned
