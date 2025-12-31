@@ -2,8 +2,6 @@
 
 
 #include "Player/MainPlayer.h"
-#include "Camera/CameraComponent.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -13,12 +11,7 @@
 AMainPlayer::AMainPlayer()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
-	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
-	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
-	PlayerCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	PlayerCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+
 	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 300.0f, 0.0f); // ...at this rotation rate
 	bUseControllerRotationPitch = false;
@@ -29,16 +22,7 @@ AMainPlayer::AMainPlayer()
 void AMainPlayer::BeginPlay()
 {
 	Super::BeginPlay();
-	if (const ULocalPlayer* LocalPlayer = (GEngine && GetWorld())?GEngine->GetLocalPlayerFromControllerId(GetWorld(), 0):nullptr)
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
-		{
-			if (PlayerMappingContext)
-			{
-				Subsystem->AddMappingContext(PlayerMappingContext, 0);
-			}
-		}
-	}
+	
 	
 	// Grant base abilities
 	if (AbilitySystemComponent && HasAuthority())
@@ -67,26 +51,6 @@ void AMainPlayer::Move(const FInputActionValue& Value)
 	}
 }
 
-void AMainPlayer::Look(const FInputActionValue& Value)
-{
-	FVector2D LookVector = Value.Get<FVector2D>();
-	if (Controller)
-	{
-		// Apply horizontal sensitivity
-		float YawInput = LookVector.X * LookSensitivityX;
-		AddControllerYawInput(YawInput);
-
-		// Apply vertical sensitivity and invert option
-		float PitchInput = LookVector.Y * LookSensitivityY;
-		if (bInvertYAxis)
-		{
-			PitchInput *= -1.0f;
-		}
-		
-		AddControllerPitchInput(PitchInput);
-	}
-}
-
 void AMainPlayer::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -100,10 +64,6 @@ void AMainPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		if (MoveAction)
 		{
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMainPlayer::Move);
-		}
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMainPlayer::Look);
 		}
 	}
 }
