@@ -9,8 +9,6 @@
 #include "Base/CombatStyleBase.h"
 #include "MainPlayer.generated.h"
 
-class USpringArmComponent;
-class UCameraComponent;
 class USkeletalMesh;
 class UMaterialInterface;
 class UInputAction;
@@ -45,7 +43,6 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	void Move(const FInputActionValue& Value);
-	void Look(const FInputActionValue& Value);
 	
 	UPROPERTY()
 	TObjectPtr<USkeletalMesh> DefaultMesh;
@@ -59,19 +56,10 @@ protected:
 	FActiveGameplayEffectHandle CurrentStylePassiveHandle;
 	
 private:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta =(AllowPrivateAccess = "true"))
-	TObjectPtr<USpringArmComponent> CameraBoom;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera", meta =(AllowPrivateAccess = "true"))
-	TObjectPtr<UCameraComponent> PlayerCamera;
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,Category = "Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputMappingContext> PlayerMappingContext;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite,Category = "Input", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UInputAction> MoveAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<UInputAction> LookAction;
 	
 };
