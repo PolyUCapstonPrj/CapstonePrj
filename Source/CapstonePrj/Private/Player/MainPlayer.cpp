@@ -2,22 +2,16 @@
 
 
 #include "Player/MainPlayer.h"
-#include "Camera/CameraComponent.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include  "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "AbilitySystemComponent.h"
+#include "Abilities/GameplayAbility.h"
 
 AMainPlayer::AMainPlayer()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
-	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character
-	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
-	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
-	PlayerCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	PlayerCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+
 	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 300.0f, 0.0f); // ...at this rotation rate
 	bUseControllerRotationPitch = false;
@@ -28,13 +22,16 @@ AMainPlayer::AMainPlayer()
 void AMainPlayer::BeginPlay()
 {
 	Super::BeginPlay();
-	if (const ULocalPlayer* LocalPlayer = (GEngine && GetWorld())?GEngine->GetLocalPlayerFromControllerId(GetWorld(), 0):nullptr)
+	
+	
+	// Grant base abilities
+	if (AbilitySystemComponent && HasAuthority())
 	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(LocalPlayer))
+		for (TSubclassOf<UGameplayAbility>& AbilityClass : BaseAbilities)
 		{
-			if (PlayerMappingContext)
+			if (AbilityClass)
 			{
-				Subsystem->AddMappingContext(PlayerMappingContext, 0);
+				AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(AbilityClass, 1, INDEX_NONE, this));
 			}
 		}
 	}
@@ -54,16 +51,6 @@ void AMainPlayer::Move(const FInputActionValue& Value)
 	}
 }
 
-void AMainPlayer::Look(const FInputActionValue& Value)
-{
-	FVector2D LookVector = Value.Get<FVector2D>();
-	if (Controller)
-	{
-		AddControllerYawInput(LookVector.X);
-		AddControllerPitchInput(LookVector.Y);
-	}
-}
-
 void AMainPlayer::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -77,10 +64,6 @@ void AMainPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		if (MoveAction)
 		{
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMainPlayer::Move);
-		}
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMainPlayer::Look);
 		}
 	}
 }
