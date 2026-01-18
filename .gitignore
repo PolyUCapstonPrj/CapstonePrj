@@ -101,9 +101,12 @@ Plugins/*/Intermediate/
 *.autosave
 
 # 虚幻引擎启动器缓存
-FeaturePacks/
-Samples/
-Templates/
+/FeaturePacks/
+/Samples/
+/Templates/
+
+
+
 
 # 其他系统文件
 *.cab
