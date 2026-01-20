@@ -53,6 +53,10 @@
 		{
 			"Name": "GASCompanion",
 			"Enabled": true
+		},
+		{
+			"Name": "RainyWindow",
+			"Enabled": true
 		}
 	]
 }
