@@ -1,0 +1,106 @@
+# 虚幻引擎生成的文件夹
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+Platforms/
+
+# Visual Studio 文件
+.vs/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.db
+*.VC.db
+*.VC.opendb
+
+# Rider 文件
+.idea/
+*.sln.iml
+
+# Visual Studio Code
+.vscode/
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.ipa
+
+# 日志文件
+*.log
+
+# 崩溃报告
+*.dmp
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+*~
+
+# Mac 系统文件
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows 系统文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# 打包输出
+Packages/
+ArchivePackages/
+
+# 虚幻引擎插件缓存
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# 虚幻引擎备份文件
+*_Backup_*
+*.backup
+
+# 虚幻引擎自动保存
+*.autosave
+
+# 虚幻引擎启动器缓存
+/FeaturePacks/
+/Samples/
+/Templates/
+
+# 其他系统文件
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.stackdump
+.p4ignore
