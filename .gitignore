@@ -116,3 +116,7 @@ Plugins/*/Intermediate/
 *.msp
 *.stackdump
 .p4ignore
+
+# 本地脚本
+*.bat
+队友使用说明.md
