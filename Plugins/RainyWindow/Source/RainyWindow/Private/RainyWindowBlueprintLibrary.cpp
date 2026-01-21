@@ -28,8 +28,19 @@ bool URainyWindowBlueprintLibrary::IsCameraZoomEnabled()
 	return FRainyWindowSceneViewExtension::IsCameraZoomEnabled();
 }
 
+void URainyWindowBlueprintLibrary::SetLightningEnabled(bool bEnabled)
+{
+	FRainyWindowSceneViewExtension::SetLightningEnabled(bEnabled);
+}
+
+bool URainyWindowBlueprintLibrary::IsLightningEnabled()
+{
+	return FRainyWindowSceneViewExtension::IsLightningEnabled();
+}
+
 
 bool URainyWindowBlueprintLibrary::IsRainEnabled()
+
 
 {
 	return FRainyWindowSceneViewExtension::IsRainEnabled();

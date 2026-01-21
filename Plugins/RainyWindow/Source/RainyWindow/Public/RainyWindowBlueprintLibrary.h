@@ -51,11 +51,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RainyWindow")
 	static bool IsCameraZoomEnabled();
 
+	/**
+	 * 设置是否启用闪电效果
+	 * @param bEnabled - true 启用，false 禁用
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RainyWindow")
+	static void SetLightningEnabled(bool bEnabled);
+
+	/**
+	 * 获取是否启用闪电效果
+	 */
+	UFUNCTION(BlueprintPure, Category = "RainyWindow")
+	static bool IsLightningEnabled();
+
 
 
 	/**
 	 * 获取当前雨窗效果是否启用
 	 */
+
 	UFUNCTION(BlueprintPure, Category = "RainyWindow")
 	static bool IsRainEnabled();
 
