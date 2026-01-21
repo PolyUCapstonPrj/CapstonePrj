@@ -10,6 +10,8 @@
 bool FRainyWindowSceneViewExtension::bRainEnabled = false;
 float FRainyWindowSceneViewExtension::RainAmount = 0.7f;
 bool FRainyWindowSceneViewExtension::bCameraZoomEnabled = false;  // 默认关闭相机伸缩
+bool FRainyWindowSceneViewExtension::bLightningEnabled = true;   // 默认开启闪电效果
+
 
 
 // ============== 静态函数实现 ==============
@@ -30,8 +32,10 @@ void FRainyWindowSceneViewExtension::ResetToDefault()
 	bRainEnabled = false;
 	RainAmount = 0.7f;
 	bCameraZoomEnabled = false;
+	bLightningEnabled = true;
 	UE_LOG(LogTemp, Log, TEXT("RainyWindow: Reset to default"));
 }
+
 
 void FRainyWindowSceneViewExtension::SetCameraZoomEnabled(bool bEnabled)
 {
@@ -44,7 +48,19 @@ bool FRainyWindowSceneViewExtension::IsCameraZoomEnabled()
 	return bCameraZoomEnabled;
 }
 
+void FRainyWindowSceneViewExtension::SetLightningEnabled(bool bEnabled)
+{
+	bLightningEnabled = bEnabled;
+	UE_LOG(LogTemp, Log, TEXT("RainyWindow: SetLightningEnabled = %s"), bEnabled ? TEXT("true") : TEXT("false"));
+}
+
+bool FRainyWindowSceneViewExtension::IsLightningEnabled()
+{
+	return bLightningEnabled;
+}
+
 bool FRainyWindowSceneViewExtension::IsRainEnabled()
+
 
 {
 	return bRainEnabled;
@@ -165,9 +181,11 @@ FScreenPassTexture FRainyWindowSceneViewExtension::RainyWindowPostProcessing(
 		PassParameters->Time = SceneView.Family->Time.GetRealTimeSeconds();
 		PassParameters->RainAmount = GetRainAmount();  // 使用综合函数（蓝图优先）
 
-		// 根据相机伸缩设置选择对应的 Shader 变体
+		// 根据相机伸缩和闪电设置选择对应的 Shader 变体
 		FRainyWindowCS::FPermutationDomain PermutationVector;
 		PermutationVector.Set<FRainyWindowCS::FCameraZoomDim>(IsCameraZoomEnabled());
+		PermutationVector.Set<FRainyWindowCS::FLightningDim>(IsLightningEnabled());
+
 
 		FIntVector GroupCount = FComputeShaderUtils::GetGroupCount(ViewSize, FComputeShaderUtils::kGolden2DGroupSize);
 

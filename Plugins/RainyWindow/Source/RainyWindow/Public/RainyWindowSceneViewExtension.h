@@ -38,8 +38,15 @@ public:
 	// 获取是否启用相机伸缩效果
 	static bool IsCameraZoomEnabled();
 	
+	// 设置是否启用闪电效果
+	static void SetLightningEnabled(bool bEnabled);
+	
+	// 获取是否启用闪电效果
+	static bool IsLightningEnabled();
+	
 	// 重置为默认值（通常在 EndPlay 时调用）
 	static void ResetToDefault();
+
 
 	
 	// 获取当前是否启用
@@ -53,6 +60,8 @@ private:
 	static bool bRainEnabled;       // 是否启用
 	static float RainAmount;        // 雨量
 	static bool bCameraZoomEnabled; // 是否启用相机伸缩效果
+	static bool bLightningEnabled;  // 是否启用闪电效果
+
 
 };
 
@@ -66,7 +75,9 @@ public:
 
 	// ========== Shader Permutation 定义 ==========
 	class FCameraZoomDim : SHADER_PERMUTATION_BOOL("CAMERA_ZOOM_ENABLED");
-	using FPermutationDomain = TShaderPermutationDomain<FCameraZoomDim>;
+	class FLightningDim : SHADER_PERMUTATION_BOOL("LIGHTNING_ENABLED");
+	using FPermutationDomain = TShaderPermutationDomain<FCameraZoomDim, FLightningDim>;
+
 
 	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
 		SHADER_PARAMETER_STRUCT(FScreenPassTextureViewportParameters, SceneColorViewport)
