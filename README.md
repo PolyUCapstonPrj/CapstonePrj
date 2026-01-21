@@ -28,6 +28,99 @@ git lfs pull
 
 ---
 
+## 分支工作流（重要！）
+
+**请勿直接推送到 main 分支！** 所有功能开发都应该在自己的分支上进行。
+
+### 使用 GitHub Desktop（推荐）
+
+#### 1. 创建新分支（开始新功能前）
+- 点击顶部 `Current Branch` → `New Branch`
+- 命名规则：`feature/你的名字-功能名`
+- 例如：`feature/ycj-boss-skill`、`feature/law-ui-design`
+
+#### 2. 开发过程中
+- 正常修改代码
+- 在 GitHub Desktop 左侧看到改动
+- 写 commit 信息，点击 `Commit to feature/xxx`
+- 可以多次 commit
+
+#### 3. 推送分支
+- 点击 `Push origin`（新分支首次推送会显示 `Publish branch`）
+
+#### 4. 创建 Pull Request（完成开发后）
+- 推送后 GitHub Desktop 会显示 `Create Pull Request` 按钮
+- 点击后跳转到 GitHub 网页
+- 填写 PR 标题和描述
+- 点击 `Create Pull Request`
+- **等待项目管理员 review 后合并**
+
+#### 5. 合并后更新本地
+- 切换回 main 分支：`Current Branch` → `main`
+- 点击 `Fetch origin` 然后 `Pull origin`
+- 可以删除已合并的本地分支
+
+### 使用命令行
+
+```bash
+# 1. 确保在最新的 main 分支上
+git checkout main
+git pull origin main
+
+# 2. 创建并切换到新分支
+git checkout -b feature/你的名字-功能名
+
+# 3. 开发完成后提交
+git add .
+git commit -m "完成xxx功能"
+
+# 4. 推送到远程
+git push origin feature/你的名字-功能名
+
+# 5. 去 GitHub 网页创建 Pull Request
+
+# 6. PR 合并后，切换回 main 并更新
+git checkout main
+git pull origin main
+git branch -d feature/你的名字-功能名  # 删除本地分支
+```
+
+---
+
+## Content 子模块提交（蓝图/资源）
+
+Content 存放在 Hugging Face，**直接推送到 main 分支**（HF 没有 PR 功能）。
+
+**方法1：双击脚本**
+- 双击项目根目录的 `提交Content修改.bat`
+- 输入提交说明，回车
+
+**方法2：命令行**
+```bash
+# 1. 进入 Content 目录
+cd Content
+
+# 2. 确保在 main 分支
+git checkout main
+
+# 3. 提交修改
+git add .
+git commit -m "你的提交说明"
+git push origin main
+
+# 4. 回到主目录，更新引用（在你的功能分支上）
+cd ..
+git add Content
+git commit -m "Update content: xxx"
+git push origin feature/你的分支名
+```
+
+**注意**：
+- 修改 Content 后，也需要在主仓库提交 Content 的引用更新
+- **提交 Content 前请先在群里沟通，避免多人同时修改同一个蓝图**
+
+---
+
 ## 日常使用
 
 ### 拉取最新代码（每次开始工作前）
@@ -45,45 +138,9 @@ git pull
 git lfs pull
 ```
 
----
-
-### 提交修改
-
-#### 情况1：只修改了代码（Source、Config 等）
-
-可以用 **GitHub Desktop**：
-1. 打开 GitHub Desktop
-2. 选择修改的文件
-3. 写提交说明
-4. 点击 Commit，然后 Push
-
-#### 情况2：修改了蓝图/资源（Content 文件夹）
-
-**方法1：双击脚本**
-- 双击项目根目录的 `提交Content修改.bat`
-- 输入提交说明，回车
-
-**方法2：命令行**
-```bash
-# 1. 进入 Content 目录
-cd Content
-
-# 2. 提交修改
-git add .
-git commit -m "你的提交说明"
-git push
-
-# 3. 回到主目录，更新引用
-cd ..
-git add Content
-git commit -m "Update content"
-git push
-```
-
-#### 情况3：同时修改了代码和蓝图
-
-1. 先用命令行提交 Content（见上方）
-2. 再用 GitHub Desktop 提交代码
+**方法3：GitHub Desktop**
+- `Fetch origin` → `Pull origin`
+- 然后运行 `拉取最新代码.bat` 更新 Content
 
 ---
 
@@ -127,11 +184,29 @@ Hugging Face 在国外，推送 Content 修改时需要开梯子。
 git config --global credential.helper store
 ```
 
+### Q：我在错误的分支上提交了怎么办？
+```bash
+# 1. 查看最近的 commit
+git log --oneline -3
+
+# 2. 撤销最近一次 commit（保留修改）
+git reset --soft HEAD~1
+
+# 3. 切换到正确的分支
+git checkout feature/正确的分支名
+
+# 4. 重新提交
+git add .
+git commit -m "你的提交说明"
+```
+
 ---
 
 ## 重要提醒
 
-1. **每次开始工作前先拉取最新代码**
-2. **修改 Content 需要用命令行或脚本提交**
-3. **推送到 Hugging Face 需要开梯子**
-4. **尽量避免多人同时修改同一个蓝图**
+1. **主仓库：请勿直接推送到 main 分支，使用 PR 流程**
+2. **Content：直接推送到 main，但提交前先在群里沟通**
+3. **每次开始工作前先拉取最新代码**
+4. **推送到 Hugging Face 需要开梯子**
+5. **尽量避免多人同时修改同一个蓝图**
+6. **主仓库分支命名：`feature/你的名字-功能名`**
