@@ -13,10 +13,9 @@ git pull %GITHUB_REPO% main
 echo.
 echo [Content子模块] 同步并更新中...
 git submodule sync
-git submodule update --init --force
+git submodule update --init
 cd Content
-git fetch %HF_REPO% main
-git reset --hard FETCH_HEAD
+git pull %HF_REPO% main --rebase
 git lfs pull
 cd ..
 

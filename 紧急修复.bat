@@ -35,7 +35,9 @@ echo [4/4] 强制同步 Content 子模块...
 cd Content
 git remote set-url origin %HF_REPO%
 git fetch %HF_REPO% main
-git reset --hard FETCH_HEAD
+git checkout --detach
+git branch -D main 2>nul
+git checkout -b main FETCH_HEAD
 git lfs pull
 cd ..
 
