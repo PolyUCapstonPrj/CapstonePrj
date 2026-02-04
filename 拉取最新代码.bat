@@ -13,11 +13,10 @@ git pull %GITHUB_REPO% main
 echo.
 echo [Content子模块] 同步并更新中...
 git submodule sync
-git submodule update --init
+git submodule update --init --force
 cd Content
-git checkout main
-echo [Content子模块] 拉取中... (%HF_REPO%)
-git pull %HF_REPO% main
+git fetch %HF_REPO% main
+git reset --hard FETCH_HEAD
 git lfs pull
 cd ..
 
