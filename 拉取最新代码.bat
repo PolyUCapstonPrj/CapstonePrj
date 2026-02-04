@@ -8,19 +8,22 @@ set HF_REPO=https://huggingface.co/PolyUCapstoneContent/Content
 
 echo.
 echo [主仓库] 拉取中... (%GITHUB_REPO%)
-git fetch %GITHUB_REPO% main
-git reset --hard FETCH_HEAD
+git pull %GITHUB_REPO% main
 
 echo.
 echo [Content子模块] 同步并更新中...
 git submodule sync
-git submodule update --init --force
+git submodule update --init
 cd Content
-git fetch %HF_REPO% main
-git reset --hard FETCH_HEAD
+git checkout main
+echo [Content子模块] 拉取中... (%HF_REPO%)
+git pull %HF_REPO% main
 git lfs pull
 cd ..
 
 echo.
 echo ===== 拉取完成 =====
+echo.
+echo 如果出现 "refusing to merge unrelated histories" 错误，
+echo 请运行 "紧急修复.bat" 强制同步。
 pause
