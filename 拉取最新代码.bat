@@ -2,26 +2,17 @@
 chcp 65001 >nul
 echo ===== 拉取最新代码 =====
 
-:: ===== 远程地址配置（写死防止出错）=====
-set GITHUB_REPO=https://github.com/PolyUCapstonPrj/CapstonePrj
-set HF_REPO=https://huggingface.co/PolyUCapstoneContent/Content
+echo.
+echo [主仓库] 拉取中...
+git pull
 
 echo.
-echo [主仓库] 拉取中... (%GITHUB_REPO%)
-git pull %GITHUB_REPO% main
-
-echo.
-echo [Content子模块] 同步并更新中...
-git submodule sync
-git submodule update --init
+echo [Content] 拉取中...
 cd Content
-git pull %HF_REPO% main --rebase
+git pull
 git lfs pull
 cd ..
 
 echo.
 echo ===== 拉取完成 =====
-echo.
-echo 如果出现 "refusing to merge unrelated histories" 错误，
-echo 请运行 "紧急修复.bat" 强制同步。
 pause
