@@ -1,0 +1,88 @@
+{
+	"FileVersion": 3,
+	"Version": 10,
+	"VersionName": "5.5.0-UE_5.6",
+	"FriendlyName": "AGR V",
+	"Description": "Set of game-ready components solving common issues.",
+	"Category": "Other",
+	"CreatedBy": "3S Game Studio OU",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"EngineVersion": "5.6.0",
+	"CanContainContent": true,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "AGR_Core_Runtime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		},
+		{
+			"Name": "AGR_Inventory_Runtime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		},
+		{
+			"Name": "AGR_Animation_Runtime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		},
+		{
+			"Name": "AGR_Animation_UncookedOnly",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac"
+			]
+		},
+		{
+			"Name": "AGR_Projectile_Runtime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		},
+		{
+			"Name": "AGR_Combat_Runtime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Linux",
+				"Mac",
+				"Android",
+				"IOS"
+			]
+		}
+	]
+}
