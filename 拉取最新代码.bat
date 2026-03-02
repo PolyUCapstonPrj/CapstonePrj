@@ -9,6 +9,7 @@ git pull
 echo.
 echo [Content] 拉取中...
 cd Content
+git checkout main
 git pull
 git lfs pull
 cd ..
