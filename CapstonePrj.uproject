@@ -55,10 +55,6 @@
 			"Enabled": true
 		},
 		{
-			"Name": "RainyWindow",
-			"Enabled": true
-		},
-		{
 			"Name": "MetaHuman",
 			"Enabled": true,
 			"SupportedTargetPlatforms": [
