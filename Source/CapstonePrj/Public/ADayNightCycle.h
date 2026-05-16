@@ -15,6 +15,18 @@
 #include "ADayNightCycle.generated.h"
 
 class UEmissiveConfigDataAsset;
+class UTExture2D;
+class APostProcessVolume;
+
+USTRUCT(BlueprintType)
+struct FLutKeyframe
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (ClampMin = "0.0",ClampMax = "24.0"))
+	float Hour = 12.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TObjectPtr<UTexture2D> SourceLUT = nullptr;
+};
 
 /** Light on/off event delegate. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLightStateChanged, bool, bLightsOn);
@@ -161,6 +173,53 @@ private:
 	/** Delayed init function: waits for World Partition streaming to complete
 	 *  before initializing the subsystems. */
 	void DelayedInit();
+
+
+	//===========LUT-based post process volume control (optional, not fully implemented) ==========
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT")
+	bool bEnableLutBlending = true;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT")
+	TArray<FLutKeyframe> LutKeyframes;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT")
+	TSoftObjectPtr<APostProcessVolume> TargetPostProcessVolume;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT", meta = (ClampMin = "0.05", ClampMax = "10.0"))
+	float LutUpdateInterval = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float LutIntensity = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "LightController|LUT", meta = (ClampMin = "0.0", ClampMax = "24.0"))
+	float CurrentHour = 12.f;
+
+	UFUNCTION(BlueprintCallable, Category = "LightController|LUT")
+	void SetCurrentHour(float InHour);
+
+private:
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> DynamicLUT = nullptr;
+
+	float LutAccumTime = 0.f;
+
+
+	float LutDebugTimer = 0.f;
+
+
+	bool bLutFirstApplyLogged = false;
+
+	void EnsureDynamicLUT();
+
+
+	void UpdateBlendedLUT();
+
+
+	void ApplyLUTToPostProcess();
 
 	// ========== Emissive activation runtime data ==========
 

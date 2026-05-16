@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ADayNightCycle.h"
 #include "UEmissiveConfigDataAsset.h"
@@ -255,6 +255,53 @@ void ADayNightCycle::Tick(float DeltaTime)
 		DeactivateAllStreetLampEmissive();
 		DeactivateStreetLampLights();
 	}
+
+#if WITH_EDITOR
+	LutDebugTimer += DeltaTime;
+	const bool bShouldLogLut = (LutDebugTimer >= 5.f);
+	if (bShouldLogLut)
+	{
+		LutDebugTimer = 0.f;
+		APostProcessVolume* PPV_Debug = TargetPostProcessVolume.LoadSynchronous();
+		UE_LOG(LogTemp, Warning,
+			TEXT("[LUT-Diag] bEnable=%d, Keyframes=%d, CurrentHour=%.2f, PPV=%s, PPV.Enabled=%s, DynamicLUT=%s, Intensity=%.2f"),
+			bEnableLutBlending ? 1 : 0,
+			LutKeyframes.Num(),
+			CurrentHour,
+			PPV_Debug ? *PPV_Debug->GetName() : TEXT("<NULL>"),
+			(PPV_Debug && PPV_Debug->bEnabled) ? TEXT("true") : TEXT("false"),
+			DynamicLUT ? *DynamicLUT->GetName() : TEXT("<NULL>"),
+			LutIntensity);
+
+		if (!bEnableLutBlending)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[LUT-Diag] ❌ bEnableLutBlending=false，LUT 系统未启用！"));
+		}
+		else if (LutKeyframes.Num() == 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[LUT-Diag] ❌ LutKeyframes 为空！请在 Details 面板的 'LightController|LUT' 分类下添加关键帧。"));
+		}
+		else if (!PPV_Debug)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[LUT-Diag] ❌ TargetPostProcessVolume 未指定！请在 Details 面板中拖入场景里的 PostProcessVolume。"));
+		}
+		else if (!PPV_Debug->bEnabled)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[LUT-Diag] ⚠ PostProcessVolume.bEnabled=false！请在 PPV 的 Details 面板里勾选 'Enabled'。"));
+		}
+	}
+
+	if (bEnableLutBlending && LutKeyframes.Num() > 0)
+	{
+		LutAccumTime += DeltaTime;
+		if (LutAccumTime >= LutUpdateInterval)
+		{
+			LutAccumTime = 0.f;
+			UpdateBlendedLUT();
+			ApplyLUTToPostProcess();
+		}
+	}
+#endif
 }
 
 int32 ADayNightCycle::GetValidMIDCount() const
@@ -723,4 +770,176 @@ int32 ADayNightCycle::GetCachedStreetLampLightCount() const
 		}
 	}
 	return Count;
+}
+
+void ADayNightCycle::SetCurrentHour(float Hour)
+{
+	CurrentHour = FMath::Fmod(FMath::Fmod(Hour, 24.f) + 24.f, 24.f); // Normalize to [0, 24)
+}
+
+void ADayNightCycle::EnsureDynamicLUT()
+{
+	if (DynamicLUT && IsValid(DynamicLUT)) return;
+	constexpr int32 W = 256;
+	constexpr int32 H = 16;
+	DynamicLUT = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8, TEXT("DayNightDynamicLUT"));
+	if (!DynamicLUT)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: Failed to create DynamicLUT"));
+		return;
+	}
+	DynamicLUT->SRGB = false;
+	DynamicLUT->Filter = TextureFilter::TF_Bilinear;
+	DynamicLUT->AddressX = TextureAddress::TA_Clamp;
+	DynamicLUT->AddressY = TextureAddress::TA_Clamp;
+	DynamicLUT->MipGenSettings = TextureMipGenSettings::TMGS_NoMipmaps;
+	DynamicLUT->LODGroup = TEXTUREGROUP_ColorLookupTable;
+}
+
+void ADayNightCycle::UpdateBlendedLUT()
+{
+	if (LutKeyframes.Num() == 0)
+	{
+		return;
+	}
+	EnsureDynamicLUT();
+	if (!DynamicLUT || !IsValid(DynamicLUT))
+	{
+		return;
+	}
+	// Find the two keyframes to blend between based on CurrentHour.
+
+	const int32 Num = LutKeyframes.Num();
+	int32 NextIdx = 0;
+	bool bFound = true;
+	for (int32 i = 0; i < Num; ++i)
+	{
+		if (LutKeyframes[i].Hour >= CurrentHour)
+		{
+			NextIdx = i;
+			bFound = true;
+			break;
+		}
+	}
+	if (!bFound)
+	{
+		NextIdx = 0; // Wrap around to first keyframe
+	}
+	const int32 PreIdx = (NextIdx - 1 + Num) % Num;
+	UTexture2D* PreLUT = LutKeyframes[PreIdx].SourceLUT;
+	UTexture2D* NextLUT = LutKeyframes[NextIdx].SourceLUT;
+	if (!PreLUT || !NextLUT)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: Invalid LUT in keyframes (PreIdx=%d, NextIdx=%d)"), PreIdx, NextIdx);
+		return;
+	}
+
+	float PreHour = LutKeyframes[PreIdx].Hour;
+	float NextHour = LutKeyframes[NextIdx].Hour;
+	float Cur = CurrentHour;
+	if (NextHour < PreHour)
+	{
+		NextHour += 24.f; // Handle wrap-around
+		if (Cur < PreHour)
+		{
+			Cur += 24.f;
+		}
+	}
+	const float Alpha = FMath::Clamp((Cur - PreHour) / (NextHour - PreHour + KINDA_SMALL_NUMBER), 0.f, 1.f);
+
+#if WITH_EDITOR
+	UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: Blending LUTs (PreIdx=%d, NextIdx=%d, PreHour=%.2f, NextHour=%.2f, CurrentHour=%.2f, Alpha=%.3f)"),
+		PreIdx, NextIdx, LutKeyframes[PreIdx].Hour, LutKeyframes[NextIdx].Hour, CurrentHour, Alpha);
+#endif
+	auto IsValidLUT = [](UTexture2D* LUT) -> bool
+	{
+		return LUT && IsValid(LUT) && LUT->GetSizeX() == 256 && LUT->GetSizeY() == 16;
+	};
+	if (!IsValidLUT(PreLUT) || !IsValidLUT(NextLUT))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: One of the LUTs in keyframes is invalid or has wrong dimensions (PreIdx=%d, NextIdx=%d)"), PreIdx, NextIdx);
+		return;
+	}
+
+	FTexture2DMipMap& PreMip = PreLUT->GetPlatformData()->Mips[0];
+	FTexture2DMipMap& NextMip = NextLUT->GetPlatformData()->Mips[0];
+	FTexture2DMipMap& DestMip = DynamicLUT->GetPlatformData()->Mips[0];
+
+	const uint8* PreData = static_cast<const uint8*>(PreMip.BulkData.LockReadOnly());
+	const uint8* NextData = static_cast<const uint8*>(NextMip.BulkData.LockReadOnly());
+	uint8* DestData = static_cast<uint8*>(DestMip.BulkData.Lock(LOCK_READ_WRITE));
+
+	if (PreData && NextData && DestData)
+	{
+		const int32 PixelCount = 256 * 16;
+		for (int32 i = 0; i < PixelCount; ++i)
+		{
+			int32 Offset = i * 4;
+			FLinearColor PreColor = FLinearColor(
+				PreData[Offset + 2] / 255.f,
+				PreData[Offset + 1] / 255.f,
+				PreData[Offset + 0] / 255.f,
+				PreData[Offset + 3] / 255.f);
+			FLinearColor NextColor = FLinearColor(
+				NextData[Offset + 2] / 255.f,
+				NextData[Offset + 1] / 255.f,
+				NextData[Offset + 0] / 255.f,
+				NextData[Offset + 3] / 255.f);
+			FLinearColor BlendedColor = FMath::Lerp(PreColor, NextColor, Alpha);
+			DestData[Offset + 0] = FMath::RoundToInt(BlendedColor.B * 255.f);
+			DestData[Offset + 1] = FMath::RoundToInt(BlendedColor.G * 255.f);
+			DestData[Offset + 2] = FMath::RoundToInt(BlendedColor.R * 255.f);
+			DestData[Offset + 3] = FMath::RoundToInt(BlendedColor.A * LutIntensity);
+		}
+	}
+	else 
+	{
+		UE_LOG(LogTemp, Error, TEXT("DayNightCycle: Failed to lock LUT data for blending"));
+	}
+	DestMip.BulkData.Unlock();
+	PreMip.BulkData.Unlock();
+	NextMip.BulkData.Unlock();
+	DynamicLUT->UpdateResource();
+}
+
+void ADayNightCycle::ApplyLUTToPostProcess()
+{
+	if (!DynamicLUT)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DynamicLUT is Empty"));
+		return;
+	}
+
+	APostProcessVolume* PPV = TargetPostProcessVolume.LoadSynchronous();
+	if (!PPV)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TargetPostProcessVolume is Empty"));
+		return;
+	}
+
+	PPV->Settings.bOverride_ColorGradingLUT = true;
+	PPV->Settings.bOverride_ColorGradingIntensity = true;
+	PPV->Settings.ColorGradingLUT = DynamicLUT;
+	PPV->Settings.ColorGradingIntensity = LutIntensity;
+
+	if (!bLutFirstApplyLogged)
+	{
+		bLutFirstApplyLogged = true;
+		UE_LOG(LogTemp, Warning,
+			TEXT("LUT Apply Successful, PPV='%s', bEnabled=%s, Priority=%.1f, Unbound=%s, Intensity=%.2f"),
+			*PPV->GetName(),
+			PPV->bEnabled ? TEXT("true") : TEXT("false"),
+			PPV->Priority,
+			PPV->bUnbound ? TEXT("true") : TEXT("false"),
+			LutIntensity);
+
+		if (!PPV->bEnabled)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PPV.bEnabled=false, players will not see the effect! Please enable PPV."));
+		}
+		if (!PPV->bUnbound)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("PPV.bUnbound=false, players must enter the PPV volume to see the effect. Consider enabling 'Infinite Extent (Unbound)'."));
+		}
+	}
 }
