@@ -170,6 +170,9 @@ private:
 	/** Debug log timer. */
 	float DebugTimer = 0.f;
 
+	/** Watched-MI sampling timer (used by the watch-list diagnostic in Tick). */
+	float WatchedMISampleTimer = 0.f;
+
 	/** Delayed init function: waits for World Partition streaming to complete
 	 *  before initializing the subsystems. */
 	void DelayedInit();
@@ -268,6 +271,12 @@ private:
 
 	/** Turn off all street-lamp emissive MIDs (called when lights go off). */
 	void DeactivateAllStreetLampEmissive();
+
+	/** Single source of truth: directly apply on/off emissive state to ALL cached MIDs
+	 *  (both building and street-lamp groups). This is idempotent and avoids the
+	 *  half-on/half-off intermediate states caused by the staggered timer-based
+	 *  activation path. Called on day/night transitions in Tick. */
+	void ApplyEmissiveState(bool bOn);
 
 	// ========== Street lamp light runtime data ==========
 

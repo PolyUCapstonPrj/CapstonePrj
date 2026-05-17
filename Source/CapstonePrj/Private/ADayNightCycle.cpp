@@ -16,10 +16,45 @@
 
 namespace
 {
+	// ============ Watch list for diagnosing the flickering MI ============
+	// Path of the MI we want to watch (the one user reported as flickering).
+	static const TCHAR* GWatchedMIPath = TEXT("/Game/Building/New/uasset4k/uasset4k/materials/kb3d_cbp_atlasdgbannerb.KB3D_CBP_AtlasDGBannerB");
+
+	// Returns true if the given MaterialInterface (MI or MID) is the watched MI
+	// (or a MID whose Parent chain leads to the watched MI).
+	static bool IsWatchedMI(const UMaterialInterface* Mat)
+	{
+		if (!Mat)
+		{
+			return false;
+		}
+
+		// Walk up the parent chain (handles MID->MIC).
+		const UMaterialInterface* Cur = Mat;
+		while (Cur)
+		{
+			const FString Path = Cur->GetPathName();
+			if (Path == GWatchedMIPath)
+			{
+				return true;
+			}
+			if (const UMaterialInstance* MI = Cast<UMaterialInstance>(Cur))
+			{
+				Cur = MI->Parent;
+			}
+			else
+			{
+				break;
+			}
+		}
+		return false;
+	}
+
 	static void BuildEmissiveGroupsByMeshScan(
 		const TArray<AActor*>& FoundActors,
 		UEmissiveConfigDataAsset* DataAsset,
 		TArray<FEmissiveMIDGroup>& OutGroupedMIDs,
+		float InitialValue,
 		const TCHAR* LogPrefix)
 	{
 		OutGroupedMIDs.Empty();
@@ -100,6 +135,7 @@ namespace
 					}
 
 					UMaterialInstanceDynamic* MID = Cast<UMaterialInstanceDynamic>(SlotMat);
+					const bool bExistingMID = (MID != nullptr);
 					if (!MID)
 					{
 						MID = MeshComp->CreateDynamicMaterialInstance(SlotIndex, LoadedMIs[*GroupIndexPtr]);
@@ -107,8 +143,32 @@ namespace
 
 					if (MID)
 					{
-						MID->SetScalarParameterValue(ParamName, DataAsset->EmissiveOffValue);
+						// Fix A: write the value that matches the current day/night state,
+						// instead of unconditionally writing OffValue. This prevents a 1-frame
+						// "forced off" right before Tick re-activates groups one by one,
+						// which was a major source of the visible flicker.
+						MID->SetScalarParameterValue(ParamName, InitialValue);
 						TempGroups[*GroupIndexPtr].MIDs.Add(MID);
+
+						// === Watched-MI diagnostic log ===
+						if (IsWatchedMI(MID))
+						{
+							float CurVal = -1.f;
+							MID->GetScalarParameterValue(ParamName, CurVal);
+							UE_LOG(LogTemp, Warning,
+								TEXT("[WatchMI] %s collected: Actor=%s, Mesh=%s, Slot=%d, MID=%p (Parent=%s), bExistingMID=%d, GroupIndex=%d, ParamName=%s, InitialValueWritten=%.3f, CurValAfterWrite=%.3f"),
+								LogPrefix,
+								*Actor->GetName(),
+								*MeshComp->GetName(),
+								SlotIndex,
+								MID,
+								MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+								bExistingMID ? 1 : 0,
+								*GroupIndexPtr,
+								*ParamName.ToString(),
+								InitialValue,
+								CurVal);
+						}
 					}
 				}
 			}
@@ -173,23 +233,29 @@ void ADayNightCycle::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADayNightCycle::DelayedInit()
 {
-	// Initialize the emissive system.
-	InitEmissiveSystem();
+	// Fix D: decide the initial state using the HARD threshold (NightPitchThreshold),
+	// bypassing the hysteresis logic in ShouldLightsBeOn(). Otherwise, when the sun
+	// pitch lies in the hysteresis dead zone [LightsOffPitchThreshold, NightPitchThreshold]
+	// at startup, the state we pick may disagree with what the scene's MICs actually
+	// look like, causing a visible mismatch on the first frames.
+	bWasLightsOn = (GetSunPitch() > NightPitchThreshold);
 
-	// Initialize the street-lamp emissive system (separated from buildings).
+	// Initialize the emissive system. Both building and street-lamp init now write the
+	// value that matches the current day/night state (Fix A), so MIDs come up consistent
+	// with the rest of the scene without a transient "all off" frame.
+	InitEmissiveSystem();
 	InitStreetLampEmissiveSystem();
 
 	// Initialize the StreetLampLight system.
 	InitStreetLampLightSystem();
 
-	bWasLightsOn = ShouldLightsBeOn();
+	// Fix E: apply the desired state to ALL MIDs in one shot through the single source
+	// of truth, so we do not depend on the staggered ActivateNext... timers to converge.
+	ApplyEmissiveState(bWasLightsOn);
 
-	// If lights should already be on, kick off the activation sequence immediately.
 	if (bWasLightsOn)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: delayed init done, currently night, activating Emissive (BuildingMIGroups=%d, StreetLampMIGroups=%d, StreetLampLights=%d)"), GroupedMIDs.Num(), StreetLampGroupedMIDs.Num(), CachedStreetLampLights.Num());
-		ActivateNextEmissive();
-		ActivateNextStreetLampEmissive();
 		ActivateStreetLampLights();
 	}
 	else
@@ -197,6 +263,11 @@ void ADayNightCycle::DelayedInit()
 		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: delayed init done, currently day (BuildingMIGroups=%d, StreetLampMIGroups=%d, StreetLampLights=%d)"), GroupedMIDs.Num(), StreetLampGroupedMIDs.Num(), CachedStreetLampLights.Num());
 		DeactivateStreetLampLights();
 	}
+
+	// Mark all groups as already activated so the staggered timer path becomes a no-op;
+	// the authoritative state has already been applied via ApplyEmissiveState above.
+	CurrentMIGroupIndex = GroupedMIDs.Num();
+	bAllEmissiveActivated = true;
 
 	bInitialized = true;
 }
@@ -221,6 +292,52 @@ void ADayNightCycle::Tick(float DeltaTime)
 		DebugTimer = 0.f;
 	}
 
+	// === Watched-MI sampling: every 1 second, read the current Emissive param value
+	//     of all MIDs whose parent chain leads to the watched MI. If the value keeps
+	//     flipping between samples, that is direct evidence of "flickering".
+	WatchedMISampleTimer += DeltaTime;
+	if (WatchedMISampleTimer >= 1.0f)
+	{
+		WatchedMISampleTimer = 0.f;
+
+		auto SampleGroups = [this](const TArray<FEmissiveMIDGroup>& Groups, UEmissiveConfigDataAsset* DA, const TCHAR* Tag)
+		{
+			if (!DA)
+			{
+				return;
+			}
+			const FName ParamName = DA->EmissiveParameterName;
+			int32 Idx = 0;
+			for (const FEmissiveMIDGroup& Group : Groups)
+			{
+				for (UMaterialInstanceDynamic* MID : Group.MIDs)
+				{
+					if (!IsValid(MID))
+					{
+						continue;
+					}
+					if (!IsWatchedMI(MID))
+					{
+						continue;
+					}
+					float CurVal = -1.f;
+					MID->GetScalarParameterValue(ParamName, CurVal);
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI-Sample] %s [%d]: MID=%p, Parent=%s, Param=%s, CurVal=%.4f, bWasLightsOn=%d"),
+						Tag, Idx, MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						*ParamName.ToString(),
+						CurVal,
+						bWasLightsOn ? 1 : 0);
+					Idx++;
+				}
+			}
+		};
+
+		SampleGroups(GroupedMIDs, EmissiveDataAsset, TEXT("Building"));
+		SampleGroups(StreetLampGroupedMIDs, StreetLampEmissiveDataAsset, TEXT("StreetLamp"));
+	}
+
 	// Detect on/off transitions (based on directional light pitch).
 	const bool bShouldLightsOn = ShouldLightsBeOn();
 	if (!bWasLightsOn && bShouldLightsOn)
@@ -236,14 +353,13 @@ void ADayNightCycle::Tick(float DeltaTime)
 			InitEmissiveSystem();
 			InitStreetLampEmissiveSystem();
 		}
-		else
-		{
-			// MID cache is valid: just reset the activation index.
-			CurrentMIGroupIndex = 0;
-			bAllEmissiveActivated = false;
-		}
-		ActivateNextEmissive();
-		ActivateNextStreetLampEmissive();
+
+		// Fix E: apply the ON state through the single source of truth so all MIDs
+		// flip in the same frame, eliminating the half-on/half-off intermediate.
+		ApplyEmissiveState(true);
+		CurrentMIGroupIndex = GroupedMIDs.Num();
+		bAllEmissiveActivated = true;
+
 		ActivateStreetLampLights();
 	}
 	else if (bWasLightsOn && !bShouldLightsOn)
@@ -251,8 +367,14 @@ void ADayNightCycle::Tick(float DeltaTime)
 		UE_LOG(LogTemp, Warning, TEXT("DayNightCycle: >>> lights OFF triggered! Pitch=%.1f"), GetSunPitch());
 		bWasLightsOn = false;
 		OnLightsOff.Broadcast(false);
-		DeactivateAllEmissive();
-		DeactivateAllStreetLampEmissive();
+
+		// Cancel any in-flight staggered activation timers and force the OFF state.
+		GetWorldTimerManager().ClearTimer(EmissiveTimerHandle);
+		GetWorldTimerManager().ClearTimer(StreetLampEmissiveTimerHandle);
+		ApplyEmissiveState(false);
+		CurrentMIGroupIndex = 0;
+		bAllEmissiveActivated = false;
+
 		DeactivateStreetLampLights();
 	}
 
@@ -376,8 +498,10 @@ void ADayNightCycle::ForceLightsOn()
 			InitEmissiveSystem();
 			InitStreetLampEmissiveSystem();
 		}
-		ActivateNextEmissive();
-		ActivateNextStreetLampEmissive();
+		// Fix E: route through the single source of truth.
+		ApplyEmissiveState(true);
+		CurrentMIGroupIndex = GroupedMIDs.Num();
+		bAllEmissiveActivated = true;
 		ActivateStreetLampLights();
 	}
 }
@@ -388,8 +512,12 @@ void ADayNightCycle::ForceLightsOff()
 	{
 		bWasLightsOn = false;
 		OnLightsOff.Broadcast(false);
-		DeactivateAllEmissive();
-		DeactivateAllStreetLampEmissive();
+		GetWorldTimerManager().ClearTimer(EmissiveTimerHandle);
+		GetWorldTimerManager().ClearTimer(StreetLampEmissiveTimerHandle);
+		// Fix E: route through the single source of truth.
+		ApplyEmissiveState(false);
+		CurrentMIGroupIndex = 0;
+		bAllEmissiveActivated = false;
 		DeactivateStreetLampLights();
 	}
 }
@@ -461,7 +589,14 @@ void ADayNightCycle::InitEmissiveSystem()
 	UE_LOG(LogTemp, Log, TEXT("EmissiveAtlas(Building): looking for Actors with Tag='%s', found %d"),
 		*EmissiveDataAsset->TargetActorTag.ToString(), FoundActors.Num());
 
-	BuildEmissiveGroupsByMeshScan(FoundActors, EmissiveDataAsset, GroupedMIDs, TEXT("EmissiveAtlas(Building)"));
+	// Fix A: pick the initial value based on the current day/night state, so newly
+	// created MIDs come up matching the rest of the scene rather than always being
+	// forced to OffValue (which caused a 1-frame "all off" right before Tick re-
+	// activated groups one by one).
+	const float InitialValue = bWasLightsOn
+		? EmissiveDataAsset->EmissiveOnValue
+		: EmissiveDataAsset->EmissiveOffValue;
+	BuildEmissiveGroupsByMeshScan(FoundActors, EmissiveDataAsset, GroupedMIDs, InitialValue, TEXT("EmissiveAtlas(Building)"));
 }
 
 void ADayNightCycle::InitStreetLampEmissiveSystem()
@@ -479,7 +614,60 @@ void ADayNightCycle::InitStreetLampEmissiveSystem()
 
 	UE_LOG(LogTemp, Log, TEXT("EmissiveAtlas(StreetLamp): collected %d street-lamp Actor(s)"), FoundActors.Num());
 
-	BuildEmissiveGroupsByMeshScan(FoundActors, StreetLampEmissiveDataAsset, StreetLampGroupedMIDs, TEXT("EmissiveAtlas(StreetLamp)"));
+	// Fix A: same rationale as in InitEmissiveSystem.
+	const float InitialValue = bWasLightsOn
+		? StreetLampEmissiveDataAsset->EmissiveOnValue
+		: StreetLampEmissiveDataAsset->EmissiveOffValue;
+	BuildEmissiveGroupsByMeshScan(FoundActors, StreetLampEmissiveDataAsset, StreetLampGroupedMIDs, InitialValue, TEXT("EmissiveAtlas(StreetLamp)"));
+}
+
+// Fix E: the single source of truth for the emissive state. Every code path that
+// changes the day/night emissive state should funnel through here, so we never end
+// up with one set of MIDs at OnValue and another at OffValue at the same time.
+void ADayNightCycle::ApplyEmissiveState(bool bOn)
+{
+	auto Apply = [bOn](const TArray<FEmissiveMIDGroup>& Groups, UEmissiveConfigDataAsset* DA, const TCHAR* Tag)
+	{
+		if (!DA)
+		{
+			return;
+		}
+		const FName ParamName = DA->EmissiveParameterName;
+		const float Value = bOn ? DA->EmissiveOnValue : DA->EmissiveOffValue;
+
+		int32 Applied = 0;
+		int32 Total = 0;
+		for (const FEmissiveMIDGroup& Group : Groups)
+		{
+			for (UMaterialInstanceDynamic* MID : Group.MIDs)
+			{
+				Total++;
+				if (!IsValid(MID))
+				{
+					continue;
+				}
+				MID->SetScalarParameterValue(ParamName, Value);
+				Applied++;
+
+				if (IsWatchedMI(MID))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI] %s.ApplyEmissiveState %s: MID=%p, Parent=%s, ValueWritten=%.3f"),
+						Tag,
+						bOn ? TEXT("ON") : TEXT("OFF"),
+						MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						Value);
+				}
+			}
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("%s.ApplyEmissiveState %s: %d/%d MID(s) updated"),
+			Tag, bOn ? TEXT("ON") : TEXT("OFF"), Applied, Total);
+	};
+
+	Apply(GroupedMIDs, EmissiveDataAsset, TEXT("Building"));
+	Apply(StreetLampGroupedMIDs, StreetLampEmissiveDataAsset, TEXT("StreetLamp"));
 }
 
 void ADayNightCycle::ActivateNextEmissive()
@@ -511,6 +699,17 @@ void ADayNightCycle::ActivateNextEmissive()
 					EmissiveDataAsset->EmissiveOnValue
 				);
 				ActivatedInGroup++;
+
+				// === Watched-MI diagnostic log ===
+				if (IsWatchedMI(MID))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI] Building.ActivateNextEmissive ON: MID=%p, Parent=%s, GroupIdx=%d/%d, OnValueWritten=%.3f"),
+						MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						CurrentMIGroupIndex, GroupedMIDs.Num(),
+						EmissiveDataAsset->EmissiveOnValue);
+				}
 			}
 		}
 
@@ -554,6 +753,16 @@ void ADayNightCycle::ActivateNextStreetLampEmissive()
 					StreetLampEmissiveDataAsset->EmissiveParameterName,
 					StreetLampEmissiveDataAsset->EmissiveOnValue
 				);
+
+				// === Watched-MI diagnostic log ===
+				if (IsWatchedMI(MID))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI] StreetLamp.ActivateNextStreetLampEmissive ON: MID=%p, Parent=%s, OnValueWritten=%.3f"),
+						MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						StreetLampEmissiveDataAsset->EmissiveOnValue);
+				}
 			}
 		}
 	}
@@ -583,6 +792,16 @@ void ADayNightCycle::DeactivateAllEmissive()
 			{
 				MID->SetScalarParameterValue(ParamName, OffValue);
 				DeactivatedCount++;
+
+				// === Watched-MI diagnostic log ===
+				if (IsWatchedMI(MID))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI] Building.DeactivateAllEmissive OFF: MID=%p, Parent=%s, OffValueWritten=%.3f"),
+						MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						OffValue);
+				}
 			}
 		}
 	}
@@ -614,6 +833,16 @@ void ADayNightCycle::DeactivateAllStreetLampEmissive()
 			if (IsValid(MID))
 			{
 				MID->SetScalarParameterValue(ParamName, OffValue);
+
+				// === Watched-MI diagnostic log ===
+				if (IsWatchedMI(MID))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WatchMI] StreetLamp.DeactivateAllStreetLampEmissive OFF: MID=%p, Parent=%s, OffValueWritten=%.3f"),
+						MID,
+						MID->Parent ? *MID->Parent->GetName() : TEXT("<null>"),
+						OffValue);
+				}
 			}
 		}
 	}
